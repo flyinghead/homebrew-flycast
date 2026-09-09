@@ -1,0 +1,40 @@
+name: Update Flycast builds
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 */6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-flycast-builds
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.repository == 'flyinghead/homebrew-flycast'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Test updater
+        run: python3 -m unittest discover -s tests -v
+      - name: Update pinned builds
+        run: python3 scripts/update_channels.py
+      - name: Commit and push updated builds
+        env:
+          TARGET_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git add -- Casks/flycast.rb Casks/flycast@master.rb Casks/flycast@dev.rb
+          if git diff --cached --quiet; then
+            echo "No channel updates to commit"
+            exit 0
+          fi
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update Flycast stable, master, and dev builds"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
